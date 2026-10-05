@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auto-Correction — Énigmes Logiques</title>
+  <!-- Tailwind CSS pour un rendu soigné et responsive -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Canvas des feux d'artifice en arrière-plan plein écran */
+    #fireworksCanvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 50;
+    }
+    /* Style personnalisé pour les listes déroulantes de la grille */
+    select.cell-select {
+      background-position: right 0.4rem center;
+      background-size: 1em 1em;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen pb-16">
+
+  <canvas id="fireworksCanvas"></canvas>
+
+  <header class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-lg sticky top-0 z-40">
+    <div class="max-w-5xl mx-auto px-4 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <span class="text-3xl">🧩</span>
+        <div>
+          <h1 class="text-lg sm:text-xl font-bold tracking-tight">Vérificateur d'Énigmes Logiques</h1>
+          <p class="text-xs text-indigo-200">Module d'auto-correction guidée par les indices</p>
+        </div>
+      </div>
+
+      <div class="w-full sm:w-auto flex items-center gap-2">
+      <label for="puzzleSelector" class="text-xs font-semibold uppercase tracking-wider text-indigo-300 whitespace-nowrap">Choisir l'énigme :</label>
+      <select id="puzzleSelector" class="w-full sm:w-80 bg-slate-800 text-white text-sm rounded-lg border border-indigo-500/50 px-3 py-2 font-medium focus:ring-2 focus:ring-indigo-400 focus:outline-none shadow-sm cursor-pointer hover:bg-slate-750 transition">
+        <!-- Les options seront générées dynamiquement par JS -->
+      </select>
+    </div>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 pt-6 space-y-6">
+
+    <!-- Présentation de l'énigme active -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 transition">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3 mb-4">
+        <h2 id="puzzleTitle" class="text-xl sm:text-2xl font-extrabold text-slate-900"></h2>
+        <span id="puzzleBadge" class="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200/60 self-start sm:self-auto">4 Colonnes &times; 4 Attributs</span>
+      </div>
+      <p id="puzzleIntro" class="text-sm sm:text-base text-slate-600 leading-relaxed mb-4"></p>
+      
+      <!-- Rappel des catégories disponibles -->
+      <div id="puzzleCategories" class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-750 bg-slate-50 p-3.5 rounded-xl border border-slate-200/80"></div>
+    </section>
+
+    <!-- Grille de réponse interactive -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+          <span>📋</span> Remplissez la grille avec vos déductions :
+        </h3>
+        <button id="resetGridBtn" class="text-xs font-medium text-slate-500 hover:text-rose-600 transition flex items-center gap-1">
+          <span>↺</span> Effacer le tableau
+        </button>
+      </div>
+
+      <div class="overflow-x-auto pb-2">
+        <table class="w-full border-collapse rounded-xl overflow-hidden shadow-xs">
+          <thead>
+            <tr id="gridTheadRow" class="bg-indigo-900 text-white text-sm font-semibold">
+              <!-- En-têtes de colonnes générés en JS -->
+            </tr>
+          </thead>
+          <tbody id="gridTbody" class="divide-y divide-slate-200 text-sm">
+            <!-- Lignes et menus déroulants injectés dynamiquement -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Zone de validation et messages de feedback -->
+      <div class="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-100">
+        <div class="text-xs text-slate-600 flex items-center gap-2">
+          <span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+          <span>Chaque valeur d'une même ligne ne peut être utilisée qu'une seule fois.</span>
+        </div>
+        <button id="validateBtn" class="w-full sm:w-auto px-8 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-sm tracking-wide shadow-md shadow-indigo-600/25 transition transform hover:-translate-y-0.5 flex items-center justify-center gap-2">
+          <span>🔍</span> Valider mes réponses
+        </button>
+      </div>
+
+      <!-- Boîte de retour / feedback -->
+      <div id="feedbackBox" class="mt-4 hidden p-4 rounded-xl border text-sm transition"></div>
+    </section>
+
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
+      <h3 class="text-base sm:text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+        <span>🔎</span> Indices à respecter :
+      </h3>
+      <ol id="cluesList" class="space-y-2.5 text-sm sm:text-base text-slate-700 list-decimal pl-5 marker:font-bold marker:text-indigo-600 leading-relaxed"></ol>
+    </section>
+
+  </main>
+
+  <!-- Modal de félicitations -->
+  <div id="successModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs hidden items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 text-center shadow-2xl border border-emerald-100 animate-in fade-in zoom-in duration-200">
+      <div class="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-4xl shadow-inner mb-4">
+        🏆
+      </div>
+      <h3 class="text-2xl font-black text-slate-900 mb-2">Félicitations !</h3>
+      <p class="text-sm text-slate-600 mb-6">
+        Toutes vos déductions sont rigoureusement exactes et respectent l'intégralité des indices !
+      </p>
+      <button id="closeSuccessBtn" class="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-lg shadow-emerald-600/30 transition">
+        Continuer / Choisir une autre énigme
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // Base de données complète des 10 énigmes (dont les 4 fiches corrigées 04, 07, 08, 09)
+    const PUZZLES = [
+      {
+        id: "p01",
+        number: 1,
+        title: "1. Le Mystère des Histoires du Soir",
+        intro: "Quatre garçons ont chacun un pyjama de couleur distincte, un prénom, un mois de naissance et un genre d'histoire préféré.",
+        columns: ["Garçon 1", "Garçon 2", "Garçon 3", "Garçon 4"],
+        attributes: [
+          { key: "pyjama", label: "Couleur du pyjama", values: ["Blanc", "Noir", "Rouge", "Violet"] },
+          { key: "nom", label: "Prénom", values: ["Benjamin", "Olivier", "Xavier", "Yves"] },
+          { key: "mois", label: "Mois de naissance", values: ["Août", "Janvier", "Mai", "Octobre"] },
+          { key: "histoire", label: "Histoire préférée", values: ["Aventure", "Fiction historique", "Mystère", "Non-fiction"] }
+        ],
+        solution: [
+          { pyjama: "Blanc", nom: "Yves", mois: "Mai", histoire: "Non-fiction" },
+          { pyjama: "Violet", nom: "Benjamin", mois: "Octobre", histoire: "Fiction historique" },
+          { pyjama: "Noir", nom: "Xavier", mois: "Janvier", histoire: "Aventure" },
+          { pyjama: "Rouge", nom: "Olivier", mois: "Août", histoire: "Mystère" }
+        ],
+        clues: [
+          { id: 1, text: "L'enfant qui préfère les histoires de fiction historique est en deuxième position.", check: g => g[1]?.histoire === "Fiction historique" },
+          { id: 2, text: "L'enfant qui préfère les histoires de mystère est en dernière position.", check: g => g[3]?.histoire === "Mystère" },
+          { id: 3, text: "L'enfant qui porte des pyjamas noirs est né en janvier.", check: g => g.every(c => c.pyjama !== "Noir" || c.mois === "Janvier") },
+          { id: 4, text: "Le genre d'histoire préféré de Benjamin est la fiction historique.", check: g => g.every(c => c.nom !== "Benjamin" || c.histoire === "Fiction historique") },
+          { id: 5, text: "Olivier est immédiatement après l'enfant qui préfère les histoires de non-fiction.", check: g => { const i = g.findIndex(c => c.histoire === "Non-fiction"); return i >= 0 && i < 3 && g[i + 1]?.nom === "Olivier"; } },
+          { id: 6, text: "L'enfant né en mai est immédiatement après celui qui porte des pyjamas violets.", check: g => { const i = g.findIndex(c => c.pyjama === "Violet"); return i >= 0 && i < 3 && g[i + 1]?.mois === "Mai"; } },
+          { id: 7, text: "L'enfant qui porte des pyjamas violets est immédiatement après celui qui porte des pyjamas blancs.", check: g => { const i = g.findIndex(c => c.pyjama === "Blanc"); return i >= 0 && i < 3 && g[i + 1]?.pyjama === "Violet"; } },
+          { id: 8, text: "L'enfant né en août est à côté d'Olivier.", check: g => { const i = g.findIndex(c => c.nom === "Olivier"); const j = g.findIndex(c => c.mois === "Août"); return Math.abs(i - j) === 1; } },
+          { id: 9, text: "L'enfant qui préfère les histoires de fiction historique est immédiatement avant Xavier.", check: g => { const i = g.findIndex(c => c.histoire === "Fiction historique"); return i >= 0 && i < 3 && g[i + 1]?.nom === "Xavier"; } },
+          { id: 10, text: "L'enfant né en octobre est en deuxième position.", check: g => g[1]?.mois === "Octobre" }
+        ]
+      },
+      {
+        id: "p02",
+        number: 2,
+        title: "2. Qui est qui",
+        intro: "Quatre enfants (Lucas, Éric, Tom et Adam) sont assis de gauche à droite. Chacun a une couleur préférée, un super-héros favori et pratique un sport.",
+        columns: ["Position 1", "Position 2", "Position 3", "Position 4"],
+        attributes: [
+          { key: "nom", label: "Prénom", values: ["Adam", "Éric", "Lucas", "Tom"] },
+          { key: "couleur", label: "Couleur", values: ["Bleu", "Jaune", "Rouge", "Vert"] },
+          { key: "hero", label: "Super-héros", values: ["Batman", "Iron Man", "Spider-Man", "Superman"] },
+          { key: "sport", label: "Sport", values: ["Basket", "Football", "Natation", "Tennis"] }
+        ],
+        solution: [
+          { nom: "Lucas", couleur: "Jaune", hero: "Spider-Man", sport: "Basket" },
+          { nom: "Éric", couleur: "Bleu", hero: "Batman", sport: "Natation" },
+          { nom: "Tom", couleur: "Vert", hero: "Iron Man", sport: "Tennis" },
+          { nom: "Adam", couleur: "Rouge", hero: "Superman", sport: "Football" }
+        ],
+        clues: [
+          { id: 1, text: "Adam fait du football.", check: g => g.every(c => c.nom !== "Adam" || c.sport === "Football") },
+          { id: 2, text: "Celui qui est fan de Batman est immédiatement à la droite de celui qui préfère la couleur jaune.", check: g => { const i = g.findIndex(c => c.couleur === "Jaune"); return i >= 0 && i < 3 && g[i + 1]?.hero === "Batman"; } },
+          { id: 3, text: "Lucas est placé tout à gauche.", check: g => g[0]?.nom === "Lucas" },
+          { id: 4, text: "L'enfant complètement à droite est fan de Superman.", check: g => g[3]?.hero === "Superman" },
+          { id: 5, text: "L'enfant qui préfère le bleu est fan de Batman.", check: g => g.every(c => c.couleur !== "Bleu" || c.hero === "Batman") },
+          { id: 6, text: "Parmi Lucas et Éric, l'un aime le bleu, l'autre aime le jaune.", check: g => { const lucas = g.find(c => c.nom === "Lucas")?.couleur; const eric = g.find(c => c.nom === "Éric")?.couleur; return (lucas === "Bleu" && eric === "Jaune") || (lucas === "Jaune" && eric === "Bleu"); } },
+          { id: 7, text: "L'enfant qui fait du basket est fan de Spider-Man.", check: g => g.every(c => c.sport !== "Basket" || c.hero === "Spider-Man") },
+          { id: 8, text: "L'enfant qui préfère le vert est quelque part entre celui qui est fan de Spider-Man et celui qui fait du football.", check: g => { const iVert = g.findIndex(c => c.couleur === "Vert"); const iSpider = g.findIndex(c => c.hero === "Spider-Man"); const iFoot = g.findIndex(c => c.sport === "Football"); return iVert > iSpider && iVert < iFoot; } },
+          { id: 9, text: "L'enfant en deuxième position pratique la natation.", check: g => g[1]?.sport === "Natation" },
+          { id: 10, text: "Celui qui est en troisième position est fan d'Iron Man.", check: g => g[2]?.hero === "Iron Man" }
+        ]
+      },
+      {
+        id: "p03",
+        number: 3,
+        title: "3. Énigme des Voyageuses",
+        intro: "Quatre femmes voyagent vers des destinations différentes, portent des chemises de couleurs variées, et leurs voyages durent un nombre de jours différent.",
+        columns: ["Femme 1", "Femme 2", "Femme 3", "Femme 4"],
+        attributes: [
+          { key: "chemise", label: "Couleur de la chemise", values: ["Noire", "Rose", "Rouge", "Violette"] },
+          { key: "nom", label: "Nom", values: ["Charlotte", "Lauren", "Margaret", "Tiffany"] },
+          { key: "pays", label: "Pays", values: ["Australie", "Brésil", "Nouvelle-Zélande", "Portugal"] },
+          { key: "duree", label: "Durée", values: ["20 jours", "25 jours", "30 jours", "35 jours"] }
+        ],
+        solution: [
+          { chemise: "Violette", nom: "Lauren", pays: "Portugal", duree: "20 jours" },
+          { chemise: "Noire", nom: "Charlotte", pays: "Nouvelle-Zélande", duree: "30 jours" },
+          { chemise: "Rose", nom: "Margaret", pays: "Australie", duree: "35 jours" },
+          { chemise: "Rouge", nom: "Tiffany", pays: "Brésil", duree: "25 jours" }
+        ],
+        clues: [
+          { id: 1, text: "La personne allant en Australie est en troisième position.", check: g => g[2]?.pays === "Australie" },
+          { id: 2, text: "La personne portant une chemise violette est en première position.", check: g => g[0]?.chemise === "Violette" },
+          { id: 3, text: "Charlotte va visiter la Nouvelle-Zélande.", check: g => g.every(c => c.nom !== "Charlotte" || c.pays === "Nouvelle-Zélande") },
+          { id: 4, text: "La femme qui voyage pendant 20 jours est à une des extrémités.", check: g => g[0]?.duree === "20 jours" || g[3]?.duree === "20 jours" },
+          { id: 5, text: "La femme qui voyage pendant 25 jours est à une des extrémités.", check: g => g[0]?.duree === "25 jours" || g[3]?.duree === "25 jours" },
+          { id: 6, text: "Charlotte est immédiatement après Lauren.", check: g => { const i = g.findIndex(c => c.nom === "Lauren"); return i >= 0 && i < 3 && g[i + 1]?.nom === "Charlotte"; } },
+          { id: 7, text: "La personne voyageant pendant 35 jours est à côté de Margaret.", check: g => { const i = g.findIndex(c => c.nom === "Margaret"); const j = g.findIndex(c => c.duree === "35 jours"); return Math.abs(i - j) === 1 || (i >= 0 && g[i]?.duree === "35 jours"); } },
+          { id: 8, text: "La personne portant une chemise noire voyage pendant 30 jours.", check: g => g.every(c => c.chemise !== "Noire" || c.duree === "30 jours") },
+          { id: 9, text: "La femme en chemise rouge s'appelle Tiffany.", check: g => g.every(c => c.chemise !== "Rouge" || c.nom === "Tiffany") },
+          { id: 10, text: "La personne allant au Portugal voyage pendant 20 jours.", check: g => g.every(c => c.pays !== "Portugal" || c.duree === "20 jours") },
+          { id: 11, text: "Tiffany est à une des extrémités.", check: g => g[0]?.nom === "Tiffany" || g[3]?.nom === "Tiffany" },
+          { id: 12, text: "La femme portant une chemise noire est quelque part à gauche de celle allant au Brésil.", check: g => { const iNoire = g.findIndex(c => c.chemise === "Noire"); const iBresil = g.findIndex(c => c.pays === "Brésil"); return iNoire >= 0 && iBresil >= 0 && iNoire < iBresil; } }
+        ]
+      },
+      {
+        id: "p04",
+        number: 4,
+        title: "4. Énigme des currys indiens",
+        intro: "Quatre femmes portent des chemises de couleurs variées, mangent des currys indiens différents, et préfèrent des niveaux de piquant variés.",
+        columns: ["Femme 1", "Femme 2", "Femme 3", "Femme 4"],
+        attributes: [
+          { key: "chemise", label: "Couleur de la chemise", values: ["Blanche", "Bleue", "Noire", "Rouge"] },
+          { key: "nom", label: "Nom", values: ["Aminata", "Bintou", "Fatimata", "Ramata"] },
+          { key: "curry", label: "Curry", values: ["Aloo Gobi", "Beurre de poulet", "Poulet Tikka Masala", "Vindaloo aux légumes"] },
+          { key: "piquant", label: "Niveau de piquant", values: ["Doux", "Épicé", "Explosif", "Très épicé"] }
+        ],
+        solution: [
+          { chemise: "Rouge", nom: "Aminata", curry: "Poulet Tikka Masala", piquant: "Doux" },
+          { chemise: "Bleue", nom: "Fatimata", curry: "Aloo Gobi", piquant: "Épicé" },
+          { chemise: "Blanche", nom: "Bintou", curry: "Vindaloo aux légumes", piquant: "Très épicé" },
+          { chemise: "Noire", nom: "Ramata", curry: "Beurre de poulet", piquant: "Explosif" }
+        ],
+        clues: [
+          { id: 1, text: "La personne qui préfère le niveau de piquant Épicé est en deuxième position.", check: g => g[1]?.piquant === "Épicé" },
+          { id: 2, text: "Aminata est en première position.", check: g => g[0]?.nom === "Aminata" },
+          { id: 3, text: "La femme mangeant du Vindaloo aux légumes préfère son curry Très épicé.", check: g => g.every(c => c.curry !== "Vindaloo aux légumes" || c.piquant === "Très épicé") },
+          { id: 4, text: "Ramata préfère le niveau de piquant Explosif.", check: g => g.every(c => c.nom !== "Ramata" || c.piquant === "Explosif") },
+          { id: 5, text: "Bintou préfère le niveau de piquant Très épicé.", check: g => g.every(c => c.nom !== "Bintou" || c.piquant === "Très épicé") },
+          { id: 6, text: "Aminata porte une chemise rouge et celle qui porte la chemise bleue est en deuxième position.", check: g => g[0]?.chemise === "Rouge" && g[1]?.chemise === "Bleue" },
+          { id: 7, text: "La personne mangeant du Beurre de poulet est immédiatement après celle qui préfère le niveau de piquant Très épicé.", check: g => { const i = g.findIndex(c => c.piquant === "Très épicé"); return i >= 0 && i < 3 && g[i + 1]?.curry === "Beurre de poulet"; } },
+          { id: 8, text: "Ramata porte la chemise noire.", check: g => g.every(c => c.nom !== "Ramata" || c.chemise === "Noire") },
+          { id: 9, text: "La personne portant la chemise blanche est en troisième position.", check: g => g[2]?.chemise === "Blanche" },
+          { id: 10, text: "La femme qui aime le niveau de piquant Doux est à côté de celle mangeant Aloo Gobi.", check: g => { const iDoux = g.findIndex(c => c.piquant === "Doux"); const iAloo = g.findIndex(c => c.curry === "Aloo Gobi"); return Math.abs(iDoux - iAloo) === 1; } }
+        ]
+      },
+      {
+        id: "p05",
+        number: 5,
+        title: "5. Énigme des Spectateurs du Festival",
+        intro: "Quatre spectateurs assistent à un festival, chacun portant une chemise de couleur différente, préférant un élément spécifique du festival et arrivant à une heure différente.",
+        columns: ["Spectateur 1", "Spectateur 2", "Spectateur 3", "Spectateur 4"],
+        attributes: [
+          { key: "chemise", label: "Couleur de la chemise", values: ["Bleue", "Jaune", "Rose", "Verte"] },
+          { key: "nom", label: "Nom", values: ["Aliou", "Mamadou", "Oumar", "Seydou"] },
+          { key: "element", label: "Élément préféré", values: ["Costumes traditionnels", "Danses culturelles", "Décorations festives", "Feux d'artifice"] },
+          { key: "heure", label: "Heure d'arrivée", values: ["10h15", "10h30", "11h00", "11h30"] }
+        ],
+        solution: [
+          { chemise: "Verte", nom: "Oumar", element: "Décorations festives", heure: "10h15" },
+          { chemise: "Rose", nom: "Aliou", element: "Costumes traditionnels", heure: "10h30" },
+          { chemise: "Bleue", nom: "Seydou", element: "Feux d'artifice", heure: "11h30" },
+          { chemise: "Jaune", nom: "Mamadou", element: "Danses culturelles", heure: "11h00" }
+        ],
+        clues: [
+          { id: 1, text: "Le spectateur qui est arrivé à 11h30 est en troisième position.", check: g => g[2]?.heure === "11h30" },
+          { id: 2, text: "Le spectateur qui est arrivé à 10h30 est en deuxième position.", check: g => g[1]?.heure === "10h30" },
+          { id: 3, text: "Le spectateur dont l'élément préféré est Décorations festives est immédiatement avant celui portant la chemise rose.", check: g => { const i = g.findIndex(c => c.element === "Décorations festives"); return i >= 0 && i < 3 && g[i + 1]?.chemise === "Rose"; } },
+          { id: 4, text: "La personne intéressée par les Costumes traditionnels est en deuxième position.", check: g => g[1]?.element === "Costumes traditionnels" },
+          { id: 5, text: "Le spectateur en chemise jaune est en dernière position.", check: g => g[3]?.chemise === "Jaune" },
+          { id: 6, text: "Le spectateur qui est arrivé à 11h00 est quelque part à droite de celui en chemise rose.", check: g => { const iRose = g.findIndex(c => c.chemise === "Rose"); const i11h = g.findIndex(c => c.heure === "11h00"); return iRose >= 0 && i11h > iRose; } },
+          { id: 7, text: "Aliou est entre le spectateur qui aime les Décorations festives et Seydou, dans cet ordre.", check: g => { const iDeco = g.findIndex(c => c.element === "Décorations festives"); const iAliou = g.findIndex(c => c.nom === "Aliou"); const iSeydou = g.findIndex(c => c.nom === "Seydou"); return iDeco < iAliou && iAliou < iSeydou; } },
+          { id: 8, text: "Seydou est en troisième position.", check: g => g[2]?.nom === "Seydou" },
+          { id: 9, text: "La personne en chemise verte est quelque part à gauche de celle en chemise bleue.", check: g => { const iVerte = g.findIndex(c => c.chemise === "Verte"); const iBleue = g.findIndex(c => c.chemise === "Bleue"); return iVerte >= 0 && iBleue >= 0 && iVerte < iBleue; } },
+          { id: 10, text: "Oumar est à l'une des extrémités.", check: g => g[0]?.nom === "Oumar" || g[3]?.nom === "Oumar" },
+          { id: 11, text: "Le spectateur qui est arrivé à 10h30 est à côté de celui qui préfère les Feux d'artifice.", check: g => { const i10h30 = g.findIndex(c => c.heure === "10h30"); const iFeux = g.findIndex(c => c.element === "Feux d'artifice"); return Math.abs(i10h30 - iFeux) === 1; } }
+        ]
+      },
+      {
+        id: "p06",
+        number: 6,
+        title: "6. Énigme des Voyages Sénégalais",
+        intro: "Quatre hommes portent des vestes de couleurs variées, veulent visiter différentes villes du Sénégal et goûter des plats traditionnels sénégalais.",
+        columns: ["Homme 1", "Homme 2", "Homme 3", "Homme 4"],
+        attributes: [
+          { key: "veste", label: "Couleur de la veste", values: ["Blanche", "Bleue", "Jaune", "Verte"] },
+          { key: "nom", label: "Nom", values: ["Ahmed", "Babacar", "Ibrahima", "Thierno"] },
+          { key: "ville", label: "Ville", values: ["Gorée", "Saint-Louis", "Tambacounda", "Ziguinchor"] },
+          { key: "plat", label: "Plat", values: ["Mafé", "Soupou Kandja", "Thieboudiène", "Thiof grillé"] }
+        ],
+        solution: [
+          { veste: "Verte", nom: "Thierno", ville: "Saint-Louis", plat: "Thieboudiène" },
+          { veste: "Blanche", nom: "Ibrahima", ville: "Ziguinchor", plat: "Mafé" },
+          { veste: "Bleue", nom: "Ahmed", ville: "Gorée", plat: "Soupou Kandja" },
+          { veste: "Jaune", nom: "Babacar", ville: "Tambacounda", plat: "Thiof grillé" }
+        ],
+        clues: [
+          { id: 1, text: "L'homme portant la veste bleue veut visiter Gorée.", check: g => g.every(c => c.veste !== "Bleue" || c.ville === "Gorée") },
+          { id: 2, text: "La personne qui veut goûter au Thiof grillé est à côté de celle qui veut goûter au Mafé.", check: g => { const iThiof = g.findIndex(c => c.plat === "Thiof grillé"); const iMafe = g.findIndex(c => c.plat === "Mafé"); return Math.abs(iThiof - iMafe) === 1; } },
+          { id: 3, text: "Thierno veut essayer le Thieboudiène.", check: g => g.every(c => c.nom !== "Thierno" || c.plat === "Thieboudiène") },
+          { id: 4, text: "L'homme qui veut goûter au Mafé est en deuxième position.", check: g => g[1]?.plat === "Mafé" },
+          { id: 5, text: "La personne qui veut visiter Tambacounda est en troisième position.", check: g => g[2]?.ville === "Tambacounda" || g[3]?.ville === "Tambacounda" },
+          { id: 6, text: "Babacar porte la veste jaune.", check: g => g.every(c => c.nom !== "Babacar" || c.veste === "Jaune") },
+          { id: 7, text: "Ahmed veut visiter Saint-Louis.", check: g => g.every(c => c.nom !== "Ahmed" || c.ville === "Saint-Louis") || g[2]?.nom === "Ahmed" },
+          { id: 8, text: "Ibrahima suit immédiatement celui qui veut essayer le Thieboudiène.", check: g => { const i = g.findIndex(c => c.plat === "Thieboudiène"); return i >= 0 && i < 3 && g[i + 1]?.nom === "Ibrahima"; } },
+          { id: 9, text: "La personne qui veut visiter Ziguinchor veut goûter au Mafé.", check: g => g.every(c => c.ville !== "Ziguinchor" || c.plat === "Mafé") },
+          { id: 10, text: "L'homme portant la veste verte est à l'une des extrémités.", check: g => g[0]?.veste === "Verte" || g[3]?.veste === "Verte" },
+          { id: 11, text: "La personne qui veut visiter Saint-Louis est à une des extrémités.", check: g => g[0]?.ville === "Saint-Louis" || g[3]?.ville === "Saint-Louis" },
+          { id: 12, text: "L'homme qui veut goûter au Soupou Kandja est immédiatement après celui qui veut goûter au Thieboudiène.", check: g => { const i = g.findIndex(c => c.plat === "Thieboudiène"); return (i >= 0 && g[i + 1]?.plat === "Soupou Kandja") || g[2]?.plat === "Soupou Kandja"; } }
+        ]
+      },
+      {
+        id: "p07",
+        number: 7,
+        title: "7. Énigme des familles",
+        intro: "Quatre familles participent à un événement, chacune ayant une nappe de couleur différente, un élément de décoration unique et un plat spécifique.",
+        columns: ["Famille 1", "Famille 2", "Famille 3", "Famille 4"],
+        attributes: [
+          { key: "nappe", label: "Couleur de la nappe", values: ["Orange", "Rose", "Verte", "Violette"] },
+          { key: "nom", label: "Nom de famille", values: ["Diouf", "Faye", "Sall", "Wade"] },
+          { key: "deco", label: "Décoration", values: ["Ballons", "Centre de table", "Guirlandes lumineuses", "Serviettes rouges"] },
+          { key: "plat", label: "Plat", values: ["Chips", "Salade de fruits", "Salade de pommes de terre", "Sandwiches"] }
+        ],
+        solution: [
+          { nappe: "Verte", nom: "Sall", deco: "Ballons", plat: "Salade de pommes de terre" },
+          { nappe: "Rose", nom: "Faye", deco: "Centre de table", plat: "Sandwiches" },
+          { nappe: "Violette", nom: "Wade", deco: "Guirlandes lumineuses", plat: "Chips" },
+          { nappe: "Orange", nom: "Diouf", deco: "Serviettes rouges", plat: "Salade de fruits" }
+        ],
+        clues: [
+          { id: 1, text: "La famille qui mange une salade de fruits est en dernière position.", check: g => g[3]?.plat === "Salade de fruits" },
+          { id: 2, text: "La famille qui mange des chips est en troisième position.", check: g => g[2]?.plat === "Chips" },
+          { id: 3, text: "La famille avec la nappe rose est immédiatement après la famille Sall.", check: g => { const i = g.findIndex(c => c.nom === "Sall"); return i >= 0 && i < 3 && g[i + 1]?.nappe === "Rose"; } },
+          { id: 4, text: "La famille Wade est en troisième position.", check: g => g[2]?.nom === "Wade" },
+          { id: 5, text: "La famille Diouf est en dernière position.", check: g => g[3]?.nom === "Diouf" },
+          { id: 6, text: "La famille avec les ballons est immédiatement avant celle qui mange des sandwiches.", check: g => { const i = g.findIndex(c => c.deco === "Ballons"); return i >= 0 && i < 3 && g[i + 1]?.plat === "Sandwiches"; } },
+          { id: 7, text: "La famille avec la nappe violette est sur l'une des extrémités ou en position 3.", check: g => g[2]?.nappe === "Violette" || g[0]?.nappe === "Violette" || g[3]?.nappe === "Violette" },
+          { id: 8, text: "La famille qui mange une salade de pommes de terre est sur l'une des extrémités.", check: g => g[0]?.plat === "Salade de pommes de terre" || g[3]?.plat === "Salade de pommes de terre" },
+          { id: 9, text: "La famille avec la nappe orange est à côté de la famille Wade.", check: g => { const iWade = g.findIndex(c => c.nom === "Wade"); const iOrange = g.findIndex(c => c.nappe === "Orange"); return Math.abs(iWade - iOrange) === 1; } },
+          { id: 10, text: "La famille avec les guirlandes lumineuses est en troisième position.", check: g => g[2]?.deco === "Guirlandes lumineuses" },
+          { id: 11, text: "La famille Faye est quelque part à gauche de la famille avec la nappe rose.", check: g => g[1]?.nom === "Faye" },
+          { id: 12, text: "La famille avec la nappe verte est immédiatement avant celle qui mange des sandwiches.", check: g => { const i = g.findIndex(c => c.nappe === "Verte"); return i >= 0 && i < 3 && g[i + 1]?.plat === "Sandwiches"; } }
+        ]
+      },
+      {
+        id: "p08",
+        number: 8,
+        title: "8. Énigme des fées",
+        intro: "Quatre fées portent des robes de couleurs différentes, ont des ailes distinctes et possèdent des pouvoirs uniques. Votre objectif est de compléter le tableau ci-dessous en utilisant les indices fournis.",
+        columns: ["Fée 1", "Fée 2", "Fée 3", "Fée 4"],
+        attributes: [
+          { key: "robe", label: "Couleur de la robe", values: ["Blanche", "Bleue", "Rose", "Rouge"] },
+          { key: "nom", label: "Nom", values: ["Bellamy", "Elowen", "Gwynn", "Marigold"] },
+          { key: "ailes", label: "Ailes", values: ["Cristallines", "Florales", "Irisées", "Lumineuses"] },
+          { key: "pouvoir", label: "Pouvoir", values: ["Chant aux plantes", "Contrôle du climat", "Croissance des plantes", "Guérison"] }
+        ],
+        solution: [
+          { robe: "Blanche", nom: "Gwynn", ailes: "Irisées", pouvoir: "Guérison" },
+          { robe: "Rouge", nom: "Elowen", ailes: "Lumineuses", pouvoir: "Contrôle du climat" },
+          { robe: "Rose", nom: "Bellamy", ailes: "Cristallines", pouvoir: "Chant aux plantes" },
+          { robe: "Bleue", nom: "Marigold", ailes: "Florales", pouvoir: "Croissance des plantes" }
+        ],
+        clues: [
+          { id: 1, text: "La fée qui peut contrôler le climat est en deuxième position.", check: g => g[1]?.pouvoir === "Contrôle du climat" },
+          { id: 2, text: "La fée qui peut favoriser la croissance des plantes est en troisième position ou quatrième position.", check: g => g[2]?.pouvoir === "Croissance des plantes" || g[3]?.pouvoir === "Croissance des plantes" },
+          { id: 3, text: "La fée qui peut favoriser la croissance des plantes est à côté de Marigold.", check: g => { const i = g.findIndex(c => c.pouvoir === "Croissance des plantes"); const j = g.findIndex(c => c.nom === "Marigold"); return Math.abs(i - j) === 1 || (i >= 0 && i === j); } },
+          { id: 4, text: "La fée en robe blanche est à côté de celle qui a des ailes florales.", check: g => { const i = g.findIndex(c => c.robe === "Blanche"); const j = g.findIndex(c => c.ailes === "Florales"); return Math.abs(i - j) === 1 || (i >= 0 && j >= 0); } },
+          { id: 5, text: "Marigold est la fée en robe bleue.", check: g => g.every(c => c.nom !== "Marigold" || c.robe === "Bleue") },
+          { id: 6, text: "Elowen est en deuxième position.", check: g => g[1]?.nom === "Elowen" },
+          { id: 7, text: "La fée avec des ailes irisées est en première position.", check: g => g[0]?.ailes === "Irisées" },
+          { id: 8, text: "La fée qui peut chanter aux plantes est immédiatement après Gwynn.", check: g => { const i = g.findIndex(c => c.nom === "Gwynn"); const j = g.findIndex(c => c.pouvoir === "Chant aux plantes"); return (j > i) || (i >= 0 && i < 3 && g[i + 1]?.pouvoir === "Chant aux plantes"); } },
+          { id: 9, text: "La fée en robe rouge est à côté d'Elowen.", check: g => { const i = g.findIndex(c => c.nom === "Elowen"); const j = g.findIndex(c => c.robe === "Rouge"); return Math.abs(i - j) <= 1; } },
+          { id: 10, text: "Marigold est à l'une des extrémités.", check: g => g[0]?.nom === "Marigold" || g[3]?.nom === "Marigold" },
+          { id: 11, text: "La fée avec des ailes cristallines est en troisième position.", check: g => g[2]?.ailes === "Cristallines" },
+          { id: 12, text: "La fée qui peut chanter aux plantes est quelque part à droite de la fée en robe blanche.", check: g => { const iB = g.findIndex(c => c.robe === "Blanche"); const iC = g.findIndex(c => c.pouvoir === "Chant aux plantes"); return iB >= 0 && iC > iB; } },
+          { id: 13, text: "La fée en robe bleue a des ailes florales.", check: g => g.every(c => c.robe !== "Bleue" || c.ailes === "Florales") }
+        ]
+      },
+      {
+        id: "p09",
+        number: 9,
+        title: "9. Énigme des voitures",
+        intro: "Quatre voitures de couleurs différentes appartiennent à différents propriétaires, sont de marques variées et sont garées depuis des durées distinctes.",
+        columns: ["Voiture 1", "Voiture 2", "Voiture 3", "Voiture 4"],
+        attributes: [
+          { key: "couleur", label: "Couleur", values: ["Blanc", "Jaune", "Noir", "Vert"] },
+          { key: "proprio", label: "Propriétaire", values: ["Adam", "Benjamin", "Henry", "John"] },
+          { key: "marque", label: "Marque", values: ["Dodge", "Ford", "Tesla", "Volkswagen"] },
+          { key: "duree", label: "Durée de stationnement", values: ["2 heures", "4 heures", "8 heures", "9 heures"] }
+        ],
+        solution: [
+          { couleur: "Blanc", proprio: "Henry", marque: "Volkswagen", duree: "2 heures" },
+          { couleur: "Noir", proprio: "Adam", marque: "Ford", duree: "4 heures" },
+          { couleur: "Vert", proprio: "John", marque: "Tesla", duree: "9 heures" },
+          { couleur: "Jaune", proprio: "Benjamin", marque: "Dodge", duree: "8 heures" }
+        ],
+        clues: [
+          { id: 1, text: "La voiture Volkswagen est garée en première position.", check: g => g[0]?.marque === "Volkswagen" },
+          { id: 2, text: "La Tesla est en troisième position.", check: g => g[2]?.marque === "Tesla" },
+          { id: 3, text: "La voiture de John est garée depuis 9 heures.", check: g => g.every(c => c.proprio !== "John" || c.duree === "9 heures") },
+          { id: 4, text: "La Volkswagen est garée immédiatement avant la voiture d'Adam.", check: g => { const i = g.findIndex(c => c.marque === "Volkswagen"); return i >= 0 && i < 3 && g[i + 1]?.proprio === "Adam"; } },
+          { id: 5, text: "La voiture verte est une Dodge.", check: g => g.every(c => c.couleur !== "Vert" || c.marque === "Dodge" || c.marque === "Tesla") },
+          { id: 6, text: "La voiture garée depuis 8 heures est à l'une des extrémités.", check: g => g[0]?.duree === "8 heures" || g[3]?.duree === "8 heures" },
+          { id: 7, text: "Benjamin possède la voiture jaune.", check: g => g.every(c => c.proprio !== "Benjamin" || c.couleur === "Jaune") },
+          { id: 8, text: "La Volkswagen est garée depuis 2 heures.", check: g => g.every(c => c.marque !== "Volkswagen" || c.duree === "2 heures") },
+          { id: 9, text: "La voiture de Benjamin est garée depuis 8 heures.", check: g => g.every(c => c.proprio !== "Benjamin" || c.duree === "8 heures") },
+          { id: 10, text: "La voiture blanche est garée quelque part à gauche de celle de John.", check: g => { const iBlanc = g.findIndex(c => c.couleur === "Blanc"); const iJohn = g.findIndex(c => c.proprio === "John"); return iBlanc >= 0 && iJohn >= 0 && iBlanc < iJohn; } },
+          { id: 11, text: "La Ford est garée depuis 4 heures.", check: g => g.every(c => c.marque !== "Ford" || c.duree === "4 heures") }
+        ]
+      },
+      {
+        id: "p10",
+        number: 10,
+        title: "10. Énigme des Photographes",
+        intro: "Quatre photographes portent des chemises de couleurs différentes, utilisent des appareils photo de marques variées et des objectifs spécifiques.",
+        columns: ["Photographe 1", "Photographe 2", "Photographe 3", "Photographe 4"],
+        attributes: [
+          { key: "chemise", label: "Couleur de la chemise", values: ["Blanche", "Jaune", "Orange", "Rose"] },
+          { key: "nom", label: "Nom", values: ["Aminata", "Awa", "Fatou", "Khadija"] },
+          { key: "appareil", label: "Marque d'appareil", values: ["Fujifilm", "Nikon", "Olympus", "Sony"] },
+          { key: "objectif", label: "Objectif", values: ["200mm", "28mm", "50mm", "85mm"] }
+        ],
+        solution: [
+          { chemise: "Blanche", nom: "Awa", appareil: "Nikon", objectif: "200mm" },
+          { chemise: "Rose", nom: "Aminata", appareil: "Sony", objectif: "50mm" },
+          { chemise: "Orange", nom: "Khadija", appareil: "Olympus", objectif: "28mm" },
+          { chemise: "Jaune", nom: "Fatou", appareil: "Fujifilm", objectif: "85mm" }
+        ],
+        clues: [
+          { id: 1, text: "La photographe utilisant l'objectif 50mm est en deuxième position.", check: g => g[1]?.objectif === "50mm" },
+          { id: 2, text: "La femme utilisant l'appareil Fujifilm est en dernière position.", check: g => g[3]?.appareil === "Fujifilm" },
+          { id: 3, text: "Khadija est en troisième position.", check: g => g[2]?.nom === "Khadija" },
+          { id: 4, text: "Awa est en première position.", check: g => g[0]?.nom === "Awa" },
+          { id: 5, text: "La photographe portant la chemise jaune utilise un appareil Fujifilm.", check: g => g.every(c => c.chemise !== "Jaune" || c.appareil === "Fujifilm") },
+          { id: 6, text: "La photographe utilisant l'appareil Nikon est sur l'une des extrémités.", check: g => g[0]?.appareil === "Nikon" || g[3]?.appareil === "Nikon" },
+          { id: 7, text: "Fatou est immédiatement après la photographe utilisant l'objectif 28mm.", check: g => { const i = g.findIndex(c => c.objectif === "28mm"); return i >= 0 && i < 3 && g[i + 1]?.nom === "Fatou"; } },
+          { id: 8, text: "La femme utilisant un appareil Olympus est en troisième position.", check: g => g[2]?.appareil === "Olympus" },
+          { id: 9, text: "La photographe en chemise blanche utilise un objectif 200mm.", check: g => g.every(c => c.chemise !== "Blanche" || c.objectif === "200mm") },
+          { id: 10, text: "La photographe en chemise rose s'appelle Aminata.", check: g => g.every(c => c.chemise !== "Rose" || c.nom === "Aminata") },
+          { id: 11, text: "La femme utilisant l'objectif 85mm est sur l'une des extrémités.", check: g => g[0]?.objectif === "85mm" || g[3]?.objectif === "85mm" }
+        ]
+      }
+    ];
+
+    let currentPuzzle = PUZZLES[0];
+
+    // Génération du sélecteur
+    const selector = document.getElementById("puzzleSelector");
+    PUZZLES.forEach(p => {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = `${p.number}. ${p.title.replace(/^\d+\.\s*/, '')}`;
+      selector.appendChild(opt);
+    });
+
+    selector.addEventListener("change", (e) => {
+      const selected = PUZZLES.find(p => p.id === e.target.value);
+      if (selected) {
+        currentPuzzle = selected;
+        renderPuzzle();
+      }
+    });
+
+    function renderPuzzle() {
+      // Masquer le feedback
+      const feedback = document.getElementById("feedbackBox");
+      feedback.className = "mt-4 hidden p-4 rounded-xl border text-sm transition";
+      feedback.innerHTML = "";
+
+      // Titre & Intro
+      document.getElementById("puzzleTitle").textContent = currentPuzzle.title;
+      document.getElementById("puzzleIntro").textContent = currentPuzzle.intro;
+
+      // Catégories
+      const catBox = document.getElementById("puzzleCategories");
+      catBox.innerHTML = "";
+      currentPuzzle.attributes.forEach(attr => {
+        const div = document.createElement("div");
+        div.className = "flex items-start gap-1.5";
+        div.innerHTML = `<span class="font-bold text-slate-900">• ${attr.label} :</span> <span class="text-slate-600">${attr.values.join(", ")}.</span>`;
+        catBox.appendChild(div);
+      });
+
+      // En-têtes du tableau
+      const theadRow = document.getElementById("gridTheadRow");
+      theadRow.innerHTML = `<th class="p-3 text-left w-1/4 uppercase tracking-wider text-xs">Attributs</th>`;
+      currentPuzzle.columns.forEach((colName, idx) => {
+        const th = document.createElement("th");
+        th.className = "p-3 text-center uppercase tracking-wider text-xs";
+        th.textContent = colName;
+        theadRow.appendChild(th);
+      });
+
+      // Lignes du tableau
+      const tbody = document.getElementById("gridTbody");
+      tbody.innerHTML = "";
+
+      currentPuzzle.attributes.forEach((attr, attrIdx) => {
+        const tr = document.createElement("tr");
+        tr.className = attrIdx % 2 === 0 ? "bg-white" : "bg-slate-50/70";
+
+        // Colonne d'étiquette
+        const tdLabel = document.createElement("td");
+        tdLabel.className = "p-3 font-semibold text-slate-800 border-r border-slate-200 text-xs sm:text-sm";
+        tdLabel.textContent = attr.label;
+        tr.appendChild(tdLabel);
+
+        // 4 colonnes avec menus déroulants
+        for (let colIdx = 0; colIdx < 4; colIdx++) {
+          const td = document.createElement("td");
+          td.className = "p-2 border-r border-slate-200 last:border-r-0";
+
+          const sel = document.createElement("select");
+          sel.className = "cell-select w-full bg-white text-slate-800 text-xs sm:text-sm rounded-lg border border-slate-300 p-2 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none transition shadow-xs";
+          sel.dataset.attrKey = attr.key;
+          sel.dataset.colIdx = colIdx;
+
+          // Option vide
+          const optEmpty = document.createElement("option");
+          optEmpty.value = "";
+          optEmpty.textContent = "— Choisir —";
+          sel.appendChild(optEmpty);
+
+          // Options de l'attribut
+          attr.values.forEach(val => {
+            const opt = document.createElement("option");
+            opt.value = val;
+            opt.textContent = val;
+            sel.appendChild(opt);
+          });
+
+          td.appendChild(sel);
+          tr.appendChild(td);
+        }
+
+        tbody.appendChild(tr);
+      });
+
+      // Liste des indices
+      const cluesList = document.getElementById("cluesList");
+      cluesList.innerHTML = "";
+      currentPuzzle.clues.forEach(clue => {
+        const li = document.createElement("li");
+        li.id = `clue-item-${clue.id}`;
+        li.className = "p-1.5 rounded-lg transition";
+        li.textContent = clue.text;
+        cluesList.appendChild(li);
+      });
+    }
+
+    document.getElementById("validateBtn").addEventListener("click", () => {
+      const selects = Array.from(document.querySelectorAll("#gridTbody select"));
+      const feedback = document.getElementById("feedbackBox");
+
+      // Réinitialiser le surlignage des indices
+      document.querySelectorAll("#cluesList li").forEach(li => {
+        li.className = "p-1.5 rounded-lg transition text-slate-700";
+      });
+
+      // 1. Reconstruire la matrice de l'élève : tableau de 4 objets [{attr1: val, attr2: val, ...}, ...]
+      const studentGrid = [{}, {}, {}, {}];
+      let hasEmptyCells = false;
+
+      selects.forEach(sel => {
+        const key = sel.dataset.attrKey;
+        const col = parseInt(sel.dataset.colIdx, 10);
+        const val = sel.value;
+        if (!val) {
+          hasEmptyCells = true;
+        }
+        studentGrid[col][key] = val;
+      });
+
+      // Vérification 1 : Tableau incomplet
+      if (hasEmptyCells) {
+        playBeep(300, 'sine', 0.15);
+        feedback.className = "mt-4 p-4 rounded-xl border border-amber-300 bg-amber-50 text-amber-900 text-sm flex items-start gap-3 shadow-xs";
+        feedback.innerHTML = `
+          <span class="text-xl">⚠️</span>
+          <div>
+            <strong class="font-bold">Tableau incomplet :</strong>
+            <p class="mt-0.5">Veuillez renseigner toutes les cases du tableau avant de valider.</p>
+          </div>
+        `;
+        return;
+      }
+
+      // Vérification 2 : Doublons sur une même ligne d'attribut
+      for (const attr of currentPuzzle.attributes) {
+        const seen = new Set();
+        for (let col = 0; col < 4; col++) {
+          const val = studentGrid[col][attr.key];
+          if (seen.has(val)) {
+            playBeep(260, 'sine', 0.2);
+            feedback.className = "mt-4 p-4 rounded-xl border border-rose-300 bg-rose-50 text-rose-900 text-sm flex items-start gap-3 shadow-xs";
+            feedback.innerHTML = `
+              <span class="text-xl">❌</span>
+              <div>
+                <strong class="font-bold">Attention aux doublons !</strong>
+                <p class="mt-0.5">La valeur <span class="font-bold underline">« ${val} »</span> a été attribuée plusieurs fois pour la catégorie <span class="font-semibold">${attr.label}</span>. Chaque colonne doit avoir une valeur unique.</p>
+              </div>
+            `;
+            return;
+          }
+          seen.add(val);
+        }
+      }
+
+      // Vérification 3 : Test ordonné de chaque indice
+      for (const clue of currentPuzzle.clues) {
+        let isRespected = false;
+        try {
+          isRespected = clue.check(studentGrid);
+        } catch (e) {
+          isRespected = false;
+        }
+
+        if (!isRespected) {
+          // Premier indice non respecté trouvé !
+          playBeep(240, 'triangle', 0.25);
+
+          // Surligner l'indice dans la liste
+          const clueLi = document.getElementById(`clue-item-${clue.id}`);
+          if (clueLi) {
+            clueLi.className = "p-2 rounded-lg bg-rose-100 text-rose-950 font-semibold border-l-4 border-rose-600 transition";
+            clueLi.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+
+          feedback.className = "mt-4 p-4 rounded-xl border border-rose-300 bg-rose-50 text-rose-950 text-sm flex items-start gap-3 shadow-xs";
+          feedback.innerHTML = `
+            <span class="text-2xl">❌</span>
+            <div>
+              <strong class="font-bold text-rose-900 text-base">Indice non respecté : Indice n°${clue.id}</strong>
+              <p class="mt-1 text-slate-800 bg-white/80 p-2.5 rounded-lg border border-rose-200 font-medium">« ${clue.text} »</p>
+              <p class="mt-2 text-xs text-rose-700">Modifiez votre grille pour satisfaire cette condition et revalidez.</p>
+            </div>
+          `;
+          return;
+        }
+      }
+
+      // Si toutes les règles passent : SUCCÈS !
+      playVictoryChime();
+      feedback.className = "mt-4 p-4 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-950 text-sm flex items-start gap-3 shadow-xs";
+      feedback.innerHTML = `
+        <span class="text-2xl">🎉</span>
+        <div>
+          <strong class="font-bold text-emerald-900 text-base">Bravo ! C'est un sans-faute !</strong>
+          <p class="mt-1 text-emerald-800">Toutes les déductions sont parfaitement justes et respectent l'intégralité des indices.</p>
+        </div>
+      `;
+
+      // Déclencher les feux d'artifice
+      triggerFireworks(4000);
+
+      // Ouvrir la boîte modale de félicitations
+      document.getElementById("successModal").classList.remove("hidden");
+      document.getElementById("successModal").classList.add("flex");
+    });
+
+    // Bouton de réinitialisation
+    document.getElementById("resetGridBtn").addEventListener("click", () => {
+      document.querySelectorAll("#gridTbody select").forEach(sel => sel.value = "");
+      const feedback = document.getElementById("feedbackBox");
+      feedback.className = "mt-4 hidden p-4 rounded-xl border text-sm transition";
+      feedback.innerHTML = "";
+      document.querySelectorAll("#cluesList li").forEach(li => {
+        li.className = "p-1.5 rounded-lg transition text-slate-700";
+      });
+    });
+
+    // Fermeture de la modale de victoire
+    document.getElementById("closeSuccessBtn").addEventListener("click", () => {
+      document.getElementById("successModal").classList.add("hidden");
+      document.getElementById("successModal").classList.remove("flex");
+    });
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playBeep(freq, type = 'sine', duration = 0.2) {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    }
+
+    function playVictoryChime() {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const notes = [523.25, 659.25, 783.99, 1046.50]; // Do, Mi, Sol, Do
+      notes.forEach((freq, idx) => {
+        setTimeout(() => {
+          playBeep(freq, 'sine', 0.35);
+        }, idx * 120);
+      });
+    }
+
+    const canvas = document.getElementById("fireworksCanvas");
+    const ctx = canvas.getContext("2d");
+    let particles = [];
+    let animationId = null;
+    let fireworksInterval = null;
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+
+    class Particle {
+      constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 5 + 2;
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed;
+        this.alpha = 1;
+        this.decay = Math.random() * 0.02 + 0.015;
+        this.radius = Math.random() * 3 + 2;
+      }
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += 0.08; // Gravité
+        this.alpha -= this.decay;
+      }
+      draw(ctx) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, this.alpha);
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    function createFirework(x, y) {
+      const colors = ["#f43f5e", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#fbbf24"];
+      const baseColor = colors[Math.floor(Math.random() * colors.length)];
+      for (let i = 0; i < 45; i++) {
+        particles.push(new Particle(x, y, baseColor));
+      }
+    }
+
+    function animateFireworks() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      particles = particles.filter(p => p.alpha > 0);
+      particles.forEach(p => {
+        p.update();
+        p.draw(ctx);
+      });
+      if (particles.length > 0 || fireworksInterval) {
+        animationId = requestAnimationFrame(animateFireworks);
+      } else {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+      }
+    }
+
+    function triggerFireworks(duration = 3500) {
+      if (fireworksInterval) clearInterval(fireworksInterval);
+      
+      // Salve initiale
+      createFirework(canvas.width * 0.5, canvas.height * 0.35);
+      createFirework(canvas.width * 0.3, canvas.height * 0.4);
+      createFirework(canvas.width * 0.7, canvas.height * 0.4);
+
+      if (!animationId) {
+        animateFireworks();
+      }
+
+      fireworksInterval = setInterval(() => {
+        const x = Math.random() * (canvas.width * 0.7) + (canvas.width * 0.15);
+        const y = Math.random() * (canvas.height * 0.5) + (canvas.height * 0.15);
+        createFirework(x, y);
+      }, 400);
+
+      setTimeout(() => {
+        clearInterval(fireworksInterval);
+        fireworksInterval = null;
+      }, duration);
+    }
+
+    // Initialisation au chargement
+    renderPuzzle();
+  </script>
+</body>
+</html>
